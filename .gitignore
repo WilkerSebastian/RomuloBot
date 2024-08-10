@@ -3,3 +3,4 @@ dist
 .env
 yarn.lock
 src/assets/messages.json
+bot.db
