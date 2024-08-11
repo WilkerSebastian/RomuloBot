@@ -1,7 +1,9 @@
 import "dotenv/config"
 import Database from 'better-sqlite3';
-import { Client, GatewayIntentBits, Events, Presence, ActivityType, TextChannel } from 'discord.js';
-import messages from "./assets/messages.json";
+import { Client, GatewayIntentBits, Events, Presence, TextChannel } from 'discord.js';
+import { readFileSync } from "fs";
+
+const messages = JSON.parse(readFileSync('./src/assets/messages.json', "utf-8")) as string[];
 
 declare global {
     namespace NodeJS {
@@ -17,7 +19,7 @@ declare global {
 interface DataSend {
   id: number;
   message: string;
-  updated_at: Date;
+  updated_at: number;
 }
 
 const TOKEN = process.env.BOT_TOKEN
@@ -34,12 +36,12 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS data_send (
     id INTEGER PRIMARY KEY,
     message TEXT,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at INTEGER
   )
 `);
 
 const getOne = db.prepare('SELECT message, updated_at FROM data_send'); 
-const insrtFirst = db.prepare('INSERT INTO data_send (id, message) VALUES (?, ?)');
+const insrtFirst = db.prepare('INSERT INTO data_send (id, message, updated_at) VALUES (?, ?, ?)');
 const updateOne = db.prepare('UPDATE data_send SET message = ?, updated_at = ? WHERE id = ?');
 
 const client = new Client({
@@ -54,9 +56,11 @@ const client = new Client({
 
 function getNotDuplicateMessage(message:string) {
 
-  const messagesFilter = messages.filter(message => !message);
+  const messagesFilter = messages.filter(m => m != message);
 
-  return messagesFilter[Math.floor(Math.random() * messagesFilter.length)];
+  const send = messagesFilter[Math.floor(Math.random() * messagesFilter.length)];
+
+  return send
 
 }
 
@@ -67,45 +71,53 @@ client.once(Events.ClientReady, () => {
 client.on(Events.PresenceUpdate, (oldPresence, newPresence) => {
 
   if (!newPresence.user || !newPresence.userId) 
-        return;
+    return;
 
   if (newPresence.userId != USER_ID) 
-        return;
+    return;
 
-    const presence = newPresence as Presence;
+  const oldStatus = oldPresence?.status;
+  const newStatus = newPresence.status;
 
-    const targetActivity = presence.activities.find(activity => 
-      activity.type === ActivityType.Playing && activity.name === ACTIVITY_NAME
-    );
+  if (!(oldStatus != 'online' && newStatus === 'online'))
+    return;
 
-    if (!targetActivity || presence.status != 'online') 
-        return;
+  const presence = newPresence as Presence;  
 
-    const channel = client.channels.cache.get(CHANNEL) as TextChannel;
+  const targetActivity = presence.activities.find(activity => activity.name === ACTIVITY_NAME);
 
-    if (channel) {
+  if (!targetActivity || presence.status != 'online') 
+    return;
 
-      const datasend = (getOne.all() as DataSend[])[0]
+  const channel = client.channels.cache.get(CHANNEL) as TextChannel;  
 
-      const MESSAGE = getNotDuplicateMessage(datasend.message)
+  if (channel) {
 
-      if (datasend) {
+    const datasend = (getOne.all() as DataSend[])[0]
 
-        if (Math.abs(datasend.updated_at.getTime() - Date.now()) / (1000 * 60 * 60 * 24) > 1) {
+    if (datasend) {
 
-          channel.send(MESSAGE);
+      if (Date.now() - datasend.updated_at < 60000) {
 
-          updateOne.run(MESSAGE, Date.now(), datasend.id);
+        const MESSAGE = getNotDuplicateMessage(datasend.message);
+        
+        channel.send(MESSAGE);
 
-        }
-
-      } else {
-
-        insrtFirst.run(1, MESSAGE);
+        updateOne.run(MESSAGE, Date.now(), datasend.id);
 
       }
 
+    } else {
+
+      const MESSAGE = getNotDuplicateMessage("");
+
+      channel.send(MESSAGE);
+
+      insrtFirst.run(1, MESSAGE, Date.now());
+
     }
+
+  }
 
 });
 
