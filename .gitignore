@@ -4,3 +4,4 @@ dist
 yarn.lock
 src/assets/messages.json
 bot.db
+.vscode
