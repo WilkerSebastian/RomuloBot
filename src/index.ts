@@ -80,7 +80,7 @@ client.on(Events.PresenceUpdate, (oldPresence, newPresence) => {
   if (!(oldStatus !== 'online' && newStatus === 'online')) 
     return;
 
-  const targetActivity = newPresence.activities.find(activity => activity.name === ACTIVITY_NAME);
+  const targetActivity = newPresence.activities.find(activity => ACTIVITY_NAME.split(",").map(s => s.trim()).filter(s => s).includes(activity.name));
 
   if (!targetActivity || newPresence.status !== 'online') 
     return;
