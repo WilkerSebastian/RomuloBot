@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { Client, GatewayIntentBits, TextChannel } from 'discord.js';
 import { readFileSync, writeFileSync } from 'fs';
 
