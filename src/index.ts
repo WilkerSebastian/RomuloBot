@@ -1,7 +1,5 @@
-import "dotenv/config";
-import Database from 'better-sqlite3';
-import { Client, GatewayIntentBits, Events, Presence, TextChannel } from 'discord.js';
-import { readFileSync } from "fs";
+import { Client, GatewayIntentBits, TextChannel } from 'discord.js';
+import { readFileSync, writeFileSync } from 'fs';
 
 declare global {
   namespace NodeJS {
@@ -9,104 +7,85 @@ declare global {
       BOT_TOKEN: string;
       USER_ID: string;
       CHANNEL: string;
-      ACTIVITY_NAME: string;
+      TIMEOUT: string;
     }
   }
 }
-
-interface DataSend {
-  id: number;
-  message: string;
-  updated_at: number;
-}
-
-const TOKEN = process.env.BOT_TOKEN;
-const USER_ID = process.env.USER_ID;
-const CHANNEL = process.env.CHANNEL;
-const ACTIVITY_NAME = process.env.ACTIVITY_NAME;
-
-if (!TOKEN || !USER_ID || !CHANNEL || !ACTIVITY_NAME) {
-  console.error('Variáveis de ambiente não definidas corretamente.');
-  process.exit(1);
-}
-
-const db = new Database('bot.db', { verbose: console.log });
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS data_send (
-    id INTEGER PRIMARY KEY,
-    message TEXT,
-    updated_at INTEGER
-  )
-`);
-
-const getOne = db.prepare('SELECT message, updated_at FROM data_send');
-const insrtFirst = db.prepare('INSERT INTO data_send (id, message, updated_at) VALUES (?, ?, ?)');
-const updateOne = db.prepare('UPDATE data_send SET message = ?, updated_at = ? WHERE id = ?');
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildPresences,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ],
+    GatewayIntentBits.GuildMembers
+  ]
 });
 
-function getNotDuplicateMessage(lastMessage: string) {
+const targetUserId = process.env.USER_ID
+const targetChannelId = process.env.CHANNEL
 
-  const messages = JSON.parse(readFileSync('./src/assets/messages.json', "utf-8")) as string[];
-  const filteredMessages = messages.filter(m => m !== lastMessage);
+let usedMessages: string[] = [];
 
-  return filteredMessages[Math.floor(Math.random() * filteredMessages.length)];
+function loadJSON(file: string): any {
+
+  const data = readFileSync(file, 'utf-8');
+  return JSON.parse(data);
 
 }
 
-client.once(Events.ClientReady, () => {
+function getRandomMessage(): string {
+
+  const messages = loadJSON('./assets/messages.json') as string[];
+  const availableMessages = messages.filter((msg: string) => !usedMessages.includes(msg));
+
+  if (availableMessages.length === 0) {
+
+    usedMessages = [];
+    return getRandomMessage();
   
-  console.log('Bot está online!');
-
-});
-
-client.on(Events.PresenceUpdate, (oldPresence, newPresence) => {
-
-  if (!newPresence.user || newPresence.userId !== USER_ID) 
-    return;
-
-  const oldStatus = oldPresence?.status;
-  const newStatus = newPresence.status;
-
-  if (!(oldStatus !== 'online' && newStatus === 'online')) 
-    return;
-
-  const targetActivity = newPresence.activities.find(activity => ACTIVITY_NAME.split(",").map(s => s.trim()).filter(s => s).includes(activity.name));
-
-  if (!targetActivity || newPresence.status !== 'online') 
-    return;
-
-  const channel = client.channels.cache.get(CHANNEL) as TextChannel;
-
-  if (channel) {
-
-    const datasend = (getOne.all() as DataSend[])[0];
-
-    if (datasend && Date.now() - datasend.updated_at >= 60000) {
-
-      const newMessage = getNotDuplicateMessage(datasend.message);
-
-      channel.send(newMessage);
-      updateOne.run(newMessage, Date.now(), datasend.id);
-
-    } else if (!datasend) {
-
-      const newMessage = getNotDuplicateMessage('');
-
-      channel.send(newMessage);
-      insrtFirst.run(1, newMessage, Date.now());
-      
-    }
   }
-});
 
-client.login(TOKEN);
+  const randomMessage = availableMessages[Math.floor(Math.random() * availableMessages.length)];
+  usedMessages.push(randomMessage);
+
+  writeFileSync('./assets/usedMessages.json', JSON.stringify(usedMessages));
+
+  return randomMessage;
+
+}
+
+async function checkUserActivity() {
+
+  const guild = client.guilds.cache.first();
+
+  if (!guild) 
+    return;
+
+  const member = await guild.members.fetch(targetUserId);
+
+  if (!member) 
+    return;
+
+  const activities = loadJSON('./assets/activity.json');
+
+  const userActivities = member.presence?.activities || [];
+
+  const isPerformingActivity = userActivities.some(activity => activities.includes(activity.name));
+
+  if (isPerformingActivity) {
+
+    const channel = await client.channels.fetch(targetChannelId) as TextChannel;
+
+    if (channel) {
+
+      const message = getRandomMessage();
+      channel.send(message);
+
+    }
+
+  }
+
+}
+
+client.once('ready', () => setInterval(checkUserActivity, Number(process.env.TIMEOUT)));
+
+client.login(process.env.BOT_TOKEN);
