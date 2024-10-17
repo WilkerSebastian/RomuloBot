@@ -3,5 +3,6 @@ dist
 .env
 yarn.lock
 src/assets/messages.json
+src/assets/activity.json
 bot.db
 .vscode
