@@ -20,29 +20,37 @@ const client = new Client({
   ]
 });
 
-const targetUserId = process.env.USER_ID
-const targetChannelId = process.env.CHANNEL
+const targetUserId = process.env.USER_ID;
+const targetChannelId = process.env.CHANNEL;
+const cooldownPeriod = 28800000; // 8 horas em milissegundos
+
+let lastMessageTimestamp: number = 0;
 
 let usedMessages: string[] = [];
 
-function loadJSON(file: string): any {
+function loadJSON(file: string) {
 
-  const data = readFileSync(file, 'utf-8');
-  return JSON.parse(data);
+  try {
+
+    const data = readFileSync(file, 'utf-8');
+    return JSON.parse(data) as string[];
+
+  } catch (error) {
+
+    console.error(`Erro ao carregar o arquivo ${file}:`, error);
+    return null; 
+
+  }
 
 }
 
-function getRandomMessage(): string {
+function getRandomMessage() {
 
   const messages = loadJSON('./assets/messages.json') as string[];
   const availableMessages = messages.filter((msg: string) => !usedMessages.includes(msg));
 
-  if (availableMessages.length === 0) {
-
+  if (availableMessages.length === 0)
     usedMessages = [];
-    return getRandomMessage();
-  
-  }
 
   const randomMessage = availableMessages[Math.floor(Math.random() * availableMessages.length)];
   usedMessages.push(randomMessage);
@@ -55,33 +63,46 @@ function getRandomMessage(): string {
 
 async function checkUserActivity() {
 
-  const guild = client.guilds.cache.first();
+  try {
 
-  if (!guild) 
-    return;
+    const guild = client.guilds.cache.first();
 
-  const member = await guild.members.fetch(targetUserId);
+    if (!guild) 
+      return;
 
-  if (!member) 
-    return;
+    const member = await guild.members.fetch(targetUserId);
+    if (!member) 
+      return;
 
-  const activities = loadJSON('./assets/activity.json');
+    const activities = loadJSON('./assets/activity.json');
+    if (!activities) 
+      return;
 
-  const userActivities = member.presence?.activities || [];
+    const userActivities = member.presence?.activities || [];
+    
+    const isPerformingActivity = userActivities.some(activity => activities.includes(activity.name));
 
-  const isPerformingActivity = userActivities.some(activity => activities.includes(activity.name));
+    const currentTime = Date.now();
 
-  if (isPerformingActivity) {
+    if (isPerformingActivity && currentTime - lastMessageTimestamp >= cooldownPeriod) {
 
-    const channel = await client.channels.fetch(targetChannelId) as TextChannel;
+      lastMessageTimestamp = currentTime;
 
-    if (channel) {
+      const channel = await client.channels.fetch(targetChannelId) as TextChannel;
 
-      const message = getRandomMessage();
-      channel.send(message);
+      if (channel) {
+
+        const message = getRandomMessage();
+
+        if (message) 
+          channel.send(message);
+        
+      }
 
     }
 
+  } catch (error) {
+    console.error('Erro ao verificar atividade do usuário:', error);
   }
 
 }
