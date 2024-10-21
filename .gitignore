@@ -4,5 +4,6 @@ dist
 yarn.lock
 assets/messages.json
 assets/activity.json
+assets/bot.txt
 bot.db
 .vscode
