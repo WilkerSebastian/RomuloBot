@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { Client, GatewayIntentBits, TextChannel } from 'discord.js';
 import { readFileSync, writeFileSync } from 'fs';
+import { resolve } from "path"
 
 declare global {
   namespace NodeJS {
@@ -33,12 +34,12 @@ function loadJSON(file: string) {
 
   try {
 
-    const data = readFileSync(file, 'utf-8');
+    const data = readFileSync(resolve(file), 'utf-8');
     return JSON.parse(data) as string[];
 
   } catch (error) {
 
-    console.error(`Erro ao carregar o arquivo ${file}:`, error);
+    console.error(`Erro ao carregar o arquivo ${resolve(file)}:`, error);
     return null; 
 
   }

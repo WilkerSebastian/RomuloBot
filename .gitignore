@@ -2,7 +2,7 @@ node_modules
 dist
 .env
 yarn.lock
-src/assets/messages.json
-src/assets/activity.json
+assets/messages.json
+assets/activity.json
 bot.db
 .vscode
